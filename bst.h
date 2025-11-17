@@ -247,9 +247,8 @@ protected:
     virtual void nodeSwap( Node<Key,Value>* n1, Node<Key,Value>* n2) ;
 
     // Add helper functions here
-    int height(Node<Key, Value>* node) const;
     void helpClear(Node<Key,Value>* node);
-    bool helpIsBalanced(Node<Key,Value>* node) const;
+    int helpBalancedHeight(Node<Key,Value>* node) const;
 
 
 protected:
@@ -472,41 +471,42 @@ template<class Key, class Value>
 void BinarySearchTree<Key, Value>::insert(const std::pair<const Key, Value> &keyValuePair)
 {
     // TODO
-    const Key& key = keyValuePair.first;
-    const Value& value = keyValuePair.second;
-
-    //check if root if null (tree is empty)
     if(root_ == nullptr){
-        root_ = new Node<Key, Value>(key, value, nullptr);
+      root_ = new Node<Key, Value>(keyValuePair.first, keyValuePair.second, nullptr);
+      return;
+    }
+
+    Node<Key, Value>* position = root_;
+
+    while(true){
+      if(keyValuePair.first == position->getKey()){
+        position->setValue(keyValuePair.second);
         return;
-    }
+      }
+  
+      bool goLeft = (keyValuePair.first < position->getKey());
+      Node<Key, Value>* nextPosition = nullptr;
 
-    //initialize pointers
-    Node<Key, Value>* curr = root_;
-    Node<Key, Value>* parent = nullptr;
+      if(goLeft){
+        nextPosition = position->getLeft();
+      } else {
+        nextPosition = position->getRight();
+      }
 
-    //traverse to find new position
-    while(curr != nullptr){
-        parent = curr; //current is parent
-        if(key < curr->getKey()){ 
-            curr = curr->getLeft(); //move to left child if key is smaller
-        } else if (curr->getKey() < key){
-            curr = curr->getRight(); //move to right child if key is larger
-        } else { //key exists
-            curr->setValue(value); //overwrite existing value
-            return;
+      if(nextPosition == nullptr){
+        Node<Key, Value>* newNode = new Node<Key, Value>(keyValuePair.first, keyValuePair.second, position);
+        if(goLeft){
+          position->setLeft(newNode);
+        } else {
+          position->setRight(newNode);
         }
-    } 
-    // current is nullptr and parent is last non-null
+        return;
+      }
 
-    Node<Key,Value>* newNode = new Node <Key, Value>(key, value, parent);
-    
-    if(key < parent->getKey()){
-        parent->setLeft(newNode); //insert new node as left child
-    } else {
-        parent->setRight(newNode); //insert new node as right child
-    }
+    position = nextPosition;
+  }
 }
+    
 
 
 /**
@@ -518,46 +518,41 @@ template<typename Key, typename Value>
 void BinarySearchTree<Key, Value>::remove(const Key& key)
 {
     // TODO
-    Node<Key, Value>* toDelete = internalFind(key);
-
-    if(toDelete == nullptr){
-        return;
+    Node<Key, Value>* node = internalFind(key);
+    if(node == nullptr){
+      return; 
+    }
+    //swap if 2 children
+    if((node->getLeft() != nullptr) && (node->getRight() != nullptr)){
+      nodeSwap(node, predecessor(node));
     }
 
-    //if 2 children, swap w predecessor
-    if(toDelete -> getRight() != nullptr && toDelete->getLeft() != nullptr){
-        Node<Key, Value>* pred = predecessor(toDelete);
-        nodeSwap(toDelete,pred);
-    }
-
-    //get parent
-    Node<Key, Value>* parent = toDelete->getParent();
-    
-    //is child null?
-    Node<Key, Value>* child = nullptr;
-    if(toDelete->getLeft() != nullptr){
-        child = toDelete->getLeft();
+    //promote child
+    Node<Key, Value>* promoted = nullptr;
+    if(node->getLeft() != nullptr){
+      promoted = node->getLeft();
     } else {
-        child = toDelete->getRight();
+      promoted = node->getRight();
     }
 
-    //update parent
-    if(child != nullptr){
-        child->setParent(parent);
+    if(promoted != nullptr){
+      promoted->setParent(node->getParent());
     }
 
-    //update child pointer
-    if(parent == nullptr){
-        root_ = child; //delete root node
-    } else { 
-        //determine which child
-        if(toDelete == parent->getLeft()){ 
-            parent->setLeft(child);
-        } else {
-            parent->setRight(child);
-        }
+    if(node->getParent() == nullptr){
+      root_ = promoted;
+      delete node;
+      return;
     }
-    delete toDelete;
+
+    Node<Key, Value>* par = node->getParent();
+    if(node == par->getLeft()){
+      par->setLeft(promoted);
+    } else {
+      par->setRight(promoted);
+    }
+
+    delete node;
 }
 
 
@@ -669,8 +664,7 @@ template<typename Key, typename Value>
 bool BinarySearchTree<Key, Value>::isBalanced() const
 {
     // TODO
-    return helpIsBalanced(root_);
-    
+    return helpBalancedHeight(root_) != -1;
 }
 
 
@@ -791,42 +785,39 @@ void BinarySearchTree<Key,Value>::helpClear(Node<Key,Value>* node){
 
     delete node;
 }
-template<typename Key, typename Value>
-int BinarySearchTree<Key,Value>::height(Node<Key, Value>* node) const{
-    if(node == nullptr){
-        return 0;
-    }
 
-    int left = height(node->getLeft());
-    int right = height(node->getRight());
-
-    if(left > right){
-        return left + 1;
-    } else {
-        return right + 1;
-    }
-} 
 
 template<typename Key, typename Value>
-bool BinarySearchTree<Key, Value>::helpIsBalanced(Node<Key, Value>* node) const
+int BinarySearchTree<Key, Value>::helpBalancedHeight(Node<Key, Value>* node) const
 {
     // empty tree is balanced
     if (node == NULL) {
-        return true;
+        return 0;
     }
     
     // heights of subtrees
-    int leftHeight = height(node->getLeft());
-    int rightHeight = height(node->getRight());
-    
-    //if heights differ by at most 1 / is balanced
-    int heightDifference = std::abs(leftHeight - rightHeight);
-    if (heightDifference > 1) {
-        return false;
+    int leftHeight = helpBalancedHeight(node->getLeft());
+    if(leftHeight == -1){
+      return -1;
+    }
+    int rightHeight = helpBalancedHeight(node->getRight());
+    if(rightHeight == -1){
+      return -1;
     }
     
-    // check both subtrees
-    return helpIsBalanced(node->getLeft()) && helpIsBalanced(node->getRight());
+    //if heights differ by at most 1 / is balanced
+    int heightDifference = leftHeight - rightHeight;
+    if (heightDifference > 1 || heightDifference < -1) {
+        return -1;
+    }
+    
+    int maxHeight;
+    if(leftHeight >rightHeight){
+      maxHeight = leftHeight;
+    } else {
+      maxHeight = rightHeight;
+    }
+    return maxHeight + 1;
 }
 
 
